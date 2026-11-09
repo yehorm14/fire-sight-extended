@@ -1,8 +1,8 @@
 // src/components/Dashboard/TopRiskAreas.jsx
 import { useEffect, useState } from 'react';
 import './TopRiskAreas.css';
+import { BACKEND_URL } from '../../config';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
 const TopRiskAreas = ({ dataSource = 'mock' }) => {
   const [areas, setAreas]         = useState([]);

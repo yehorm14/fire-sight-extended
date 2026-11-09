@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: fire-sight-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn main:app --app-dir backend --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.5
+      - key: CORS_ORIGINS
+        sync: false # set to the Vercel URL, e.g. https://fire-sight.vercel.app
+      - key: OPENAI_API_KEY
+        sync: false # optional; explanations fall back to templates without it
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini

@@ -1,21 +1,46 @@
 """
-FireSight — Dataset Downloader
-Run this script from inside data-pipeline/ with the venv active:
-    python download_datasets.py
+Fire Sight - dataset downloader.
+
+Fetches the raw inputs that run_model.py needs into data-pipeline/raw/
+(gitignored). Run from anywhere:
+
+    python data-pipeline/download_datasets.py
+
+Files written:
+    raw/simd2020_indicators.xlsx      SIMD 2020v2 indicator data (Scottish Government)
+    raw/fire_statistics_scotland.csv  Fires by type of incident, per ward (statistics.gov.scot)
+
+Manual step: raw/simd2020.csv (SIMD 2020v2 ranks and deciles per data zone).
+See the message printed at the end.
+
+Optional: pass --boundaries to also download the 2011 data zone boundaries as
+GeoJSON (needs geopandas). run_model.py does not use them.
 """
 
+import argparse
 import io
-import os
 import shutil
+import sys
 import zipfile
 from pathlib import Path
 
 import requests
 
-RAW = Path("raw")
-RAW.mkdir(exist_ok=True)
+RAW = Path(__file__).resolve().parent / "raw"
+HEADERS = {"User-Agent": "Mozilla/5.0 (Fire Sight data pipeline)"}
 
-HEADERS = {"User-Agent": "Mozilla/5.0 (FireSight hackathon data pipeline)"}
+SIMD_INDICATORS_URL = (
+    "https://www.gov.scot/binaries/content/documents/govscot/publications/"
+    "statistics/2020/01/scottish-index-of-multiple-deprivation-2020-indicator-data/"
+    "documents/simd_2020_indicators/simd_2020_indicators/"
+    "govscot%3Adocument/SIMD%2B2020v2%2B-%2Bindicators.xlsx"
+)
+FIRE_STATS_URL = (
+    "https://statistics.gov.scot/downloads/cube-table"
+    "?uri=http%3A%2F%2Fstatistics.gov.scot%2Fdata%2Ffire---type-of-incident"
+)
+DATAZONE_BOUNDARIES_URL = "https://maps.gov.scot/ATOM/shapefiles/SG_DataZoneBdry_2011.zip"
+SIMD_PAGE = "https://www.gov.scot/collections/scottish-index-of-multiple-deprivation-2020/"
 
 
 def download(url: str, dest: Path, label: str) -> bool:
@@ -27,136 +52,81 @@ def download(url: str, dest: Path, label: str) -> bool:
         r = requests.get(url, headers=HEADERS, timeout=120)
         r.raise_for_status()
         dest.write_bytes(r.content)
-        print(f"  Saved {len(r.content) / 1024:.0f} KB  ->  {dest}")
+        print(f"  Saved {len(r.content) / 1024:.0f} KB -> {dest}")
         return True
-    except Exception as e:
+    except requests.RequestException as e:
         print(f"  FAILED: {e}")
         return False
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 1.  SIMD 2020v2  —  FULL INDICATOR FILE  (Excel, 2.5 MB)
-#     Contains Housing, Crime, Health, Employment sub-domain scores
-#     per DataZone.  This is separate from the rank/decile CSV you already have.
-# ─────────────────────────────────────────────────────────────────────────────
-print("\n[1] SIMD 2020v2 full indicator data")
-SIMD_XLSX_URL = (
-    "https://www.gov.scot/binaries/content/documents/govscot/publications/"
-    "statistics/2020/01/scottish-index-of-multiple-deprivation-2020-indicator-data/"
-    "documents/simd_2020_indicators/simd_2020_indicators/"
-    "govscot%3Adocument/SIMD%2B2020v2%2B-%2Bindicators.xlsx"
-)
-simd_xlsx = RAW / "simd2020_indicators.xlsx"
-simd_csv  = RAW / "simd2020_indicators.csv"
-
-if not simd_csv.exists():
-    if download(SIMD_XLSX_URL, simd_xlsx, "SIMD 2020v2 indicators (xlsx)"):
-        import pandas as pd
-        print("  Converting Excel -> CSV ...")
-        xls = pd.ExcelFile(simd_xlsx)
-        print(f"  Sheets in file: {xls.sheet_names}")
-        # The indicator data is typically on the first sheet
-        df = pd.read_excel(simd_xlsx, sheet_name=0)
-        print(f"  Shape: {df.shape}")
-        print(f"  Columns: {df.columns.tolist()}")
-        df.to_csv(simd_csv, index=False)
-        print(f"  Saved CSV  ->  {simd_csv}")
-        simd_xlsx.unlink()  # remove xlsx to save space
-else:
-    print(f"  [skip] {simd_csv.name} already exists")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 2.  DataZone 2011 Boundaries  (Shapefile -> GeoJSON)
-#     All-Scotland DataZone polygons.  We filter to Glasgow in the notebook.
-# ─────────────────────────────────────────────────────────────────────────────
-print("\n[2] DataZone 2011 boundaries")
-DZ_ZIP_URL = "https://maps.gov.scot/ATOM/shapefiles/SG_DataZoneBdry_2011.zip"
-dz_geojson = RAW / "scotland_datazones.geojson"
-dz_tmp     = RAW / "_dz_tmp"
-
-if not dz_geojson.exists():
+def download_boundaries() -> None:
+    """Optional: Scotland 2011 data zone polygons as GeoJSON (needs geopandas)."""
+    dest = RAW / "scotland_datazones.geojson"
+    if dest.exists():
+        print(f"  [skip] {dest.name} already exists")
+        return
     try:
         import geopandas as gpd
+    except ImportError:
+        print("  geopandas not installed - run: pip install geopandas")
+        return
 
-        print("  Downloading shapefile ZIP ...")
-        r = requests.get(DZ_ZIP_URL, headers=HEADERS, timeout=180)
+    tmp = RAW / "_dz_tmp"
+    try:
+        r = requests.get(DATAZONE_BOUNDARIES_URL, headers=HEADERS, timeout=180)
         r.raise_for_status()
-        print(f"  Downloaded {len(r.content) / 1024:.0f} KB — extracting ...")
-
-        z = zipfile.ZipFile(io.BytesIO(r.content))
-        z.extractall(dz_tmp)
-
-        shp_files = list(dz_tmp.rglob("*.shp"))
+        zipfile.ZipFile(io.BytesIO(r.content)).extractall(tmp)
+        shp_files = list(tmp.rglob("*.shp"))
         if not shp_files:
             raise FileNotFoundError("No .shp file found in ZIP")
-
-        gdf = gpd.read_file(shp_files[0])
-        print(f"  Loaded {len(gdf)} zones  —  columns: {gdf.columns.tolist()}")
-
-        # Reproject to WGS84 (standard for GeoJSON / web maps)
-        gdf = gdf.to_crs("EPSG:4326")
-        gdf.to_file(dz_geojson, driver="GeoJSON")
-        print(f"  Saved GeoJSON  ->  {dz_geojson}")
-
-    except ImportError:
-        print("  geopandas not installed — run: pip install geopandas")
-    except Exception as e:
+        gdf = gpd.read_file(shp_files[0]).to_crs("EPSG:4326")
+        gdf.to_file(dest, driver="GeoJSON")
+        print(f"  Saved {len(gdf)} zones -> {dest}")
+    except (requests.RequestException, zipfile.BadZipFile, FileNotFoundError, OSError, ValueError) as e:
         print(f"  FAILED: {e}")
+    except Exception as e:  # geopandas/pyogrio raise their own error types on read or reprojection
+        print(f"  FAILED: {type(e).__name__}: {e}")
     finally:
-        if dz_tmp.exists():
-            shutil.rmtree(dz_tmp)
-else:
-    print(f"  [skip] {dz_geojson.name} already exists")
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 3.  Scottish Fire Statistics  (Council Area level, from statistics.gov.scot)
-#     NOTE: This is aggregated at Council Area level — NOT DataZone level.
-#     It provides total dwelling fire counts per council area per year (2009–2023).
-#     Useful for Glasgow-wide trend context but cannot be used for per-zone
-#     forecasting.  For DataZone-level incident data you would need SFRS
-#     operational data which is not publicly available at that resolution.
-# ─────────────────────────────────────────────────────────────────────────────
-print("\n[3] Scottish Fire Statistics (Council Area level)")
-FIRE_URL = (
-    "https://statistics.gov.scot/downloads/cube-table"
-    "?uri=http%3A%2F%2Fstatistics.gov.scot%2Fdata%2Ffire---type-of-incident"
-)
-download(FIRE_URL, RAW / "fire_statistics_scotland.csv",
-         "Fire type-of-incident statistics")
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--boundaries", action="store_true",
+                        help="also download data zone boundaries (needs geopandas)")
+    args = parser.parse_args()
+
+    RAW.mkdir(exist_ok=True)
+
+    print("\n[1] SIMD 2020v2 indicators (Scottish Government)")
+    required_ok = [
+        download(SIMD_INDICATORS_URL, RAW / "simd2020_indicators.xlsx", "SIMD 2020v2 indicators")
+    ]
+
+    print("\n[2] Fire statistics by type of incident (statistics.gov.scot)")
+    required_ok.append(download(FIRE_STATS_URL, RAW / "fire_statistics_scotland.csv", "fire statistics"))
+
+    if args.boundaries:
+        print("\n[3] Data zone 2011 boundaries")
+        download_boundaries()
+
+    print("\n[manual] raw/simd2020.csv")
+    if (RAW / "simd2020.csv").exists():
+        print("  [skip] simd2020.csv already exists")
+    else:
+        print("  Download the SIMD 2020v2 ranks file (CSV with columns DataZone, IntZone, CA,")
+        print("  SIMD2020V2CountryDecile, ...) from:")
+        print(f"  {SIMD_PAGE}")
+        print(f"  and save it as {RAW / 'simd2020.csv'}")
+
+    print("\nFiles in raw/:")
+    for f in sorted(RAW.iterdir()):
+        print(f"  {f.name:40s} {f.stat().st_size / 1024:>8.0f} KB")
+
+    if not all(required_ok):
+        print("\nERROR: a required download failed (see FAILED above).")
+        sys.exit(1)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 4.  Census 2022  —  MANUAL STEP REQUIRED
-#     NRS has not published bulk DataZone-level Census 2022 CSVs via direct URL.
-#     Download these two tables manually from scotlandscensus.gov.uk:
-#
-#     Table needed — Population by age:
-#       https://www.scotlandscensus.gov.uk/search-the-census
-#       Select: Geography = Data Zone, Variable = Age (5-year groups)
-#       Download as CSV  ->  save as  raw/census2022_age_datazone.csv
-#
-#     Table needed — Household composition:
-#       Select: Geography = Data Zone, Variable = Household composition
-#       Download as CSV  ->  save as  raw/census2022_household_datazone.csv
-#
-#     Expected columns (adjust CENSUS_* constants in notebook Section 3):
-#       DataZone, total_population, age65plus,
-#       single_occ_households, total_households
-# ─────────────────────────────────────────────────────────────────────────────
-print("\n[4] Census 2022 — MANUAL DOWNLOAD REQUIRED")
-print("    Visit: https://www.scotlandscensus.gov.uk/search-the-census")
-print("    Download two tables at DataZone level:")
-print("    - Age (5-year groups)  ->  save as raw/census2022_age_datazone.csv")
-print("    - Household composition  ->  save as raw/census2022_household_datazone.csv")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Summary
-# ─────────────────────────────────────────────────────────────────────────────
-print("\n" + "=" * 60)
-print("FILES IN raw/:")
-for f in sorted(RAW.iterdir()):
-    size = f.stat().st_size / 1024
-    print(f"  {f.name:45s}  {size:>8.0f} KB")
+if __name__ == "__main__":
+    main()

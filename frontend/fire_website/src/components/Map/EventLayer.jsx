@@ -1,8 +1,7 @@
 import { Marker, Pane, Popup } from 'react-leaflet';
 import { useEffect, useMemo, useState } from 'react';
 import L from 'leaflet';
-
-const DEFAULT_EVENTS_API_URL = 'http://localhost:5000/api/events';
+import { EVENTS_API_URL } from '../../config';
 
 /** Only show “big” events (major crowd / demand signal). */
 const MIN_ATTENDANCE = 1000;
@@ -19,44 +18,27 @@ const eventAlertIcon = L.divIcon({
   popupAnchor: [0, -22]
 });
 
-const FALLBACK_EVENTS = [
-  {
-    id: 'evt-1',
-    name: 'Glasgow City Marathon Expo',
-    location: 'SEC Glasgow',
-    date: '2026-04-28',
-    estimatedAttendance: 11000,
-    lat: 55.8591,
-    lng: -4.2887
-  },
-  {
-    id: 'evt-2',
-    name: 'Summer Riverside Festival',
-    location: 'Glasgow Green',
-    date: '2026-07-12',
-    estimatedAttendance: 18000,
-    lat: 55.8517,
-    lng: -4.2369
-  },
-  {
-    id: 'evt-3',
-    name: 'Innovation and Tech Summit',
-    location: 'Scottish Event Campus',
-    date: '2026-10-06',
-    estimatedAttendance: 7000,
-    lat: 55.8598,
-    lng: -4.288
-  },
-  {
-    id: 'evt-4',
-    name: 'Winter Market Launch',
-    location: 'George Square',
-    date: '2026-12-02',
-    estimatedAttendance: 9500,
-    lat: 55.8612,
-    lng: -4.2518
-  }
+// Illustrative sample events, used when no VITE_EVENTS_API_URL is configured.
+// Dates are offsets from today so the demo always has upcoming events to show.
+const localDateString = (daysFromToday) => {
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromToday);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+const SAMPLE_EVENTS = [
+  { id: 'evt-1', name: 'Glasgow City Marathon Expo', location: 'SEC Glasgow', days: 21, estimatedAttendance: 11000, lat: 55.8591, lng: -4.2887 },
+  { id: 'evt-2', name: 'Summer Riverside Festival', location: 'Glasgow Green', days: 120, estimatedAttendance: 18000, lat: 55.8517, lng: -4.2369 },
+  { id: 'evt-3', name: 'Innovation and Tech Summit', location: 'Scottish Event Campus', days: 240, estimatedAttendance: 7000, lat: 55.8598, lng: -4.288 },
+  { id: 'evt-4', name: 'Winter Market Launch', location: 'George Square', days: 400, estimatedAttendance: 9500, lat: 55.8612, lng: -4.2518 }
 ];
+
+// Built when the component mounts, not at module load, so dates track the current day.
+const buildFallbackEvents = () =>
+  SAMPLE_EVENTS.map(({ days, ...event }) => ({ ...event, date: localDateString(days) }));
+
+const bigEvents = (events) => events.filter((e) => e.estimatedAttendance > MIN_ATTENDANCE);
 
 const TIMEFRAME_TO_MONTHS = {
   Current: 1,
@@ -100,29 +82,28 @@ const EventLayer = ({ timeFrame }) => {
     let cancelled = false;
 
     const fetchEvents = async () => {
+      if (!EVENTS_API_URL) {
+        setEvents(bigEvents(buildFallbackEvents()));
+        return;
+      }
       try {
-        const response = await fetch(
-          import.meta.env.VITE_EVENTS_API_URL || DEFAULT_EVENTS_API_URL
-        );
+        const response = await fetch(EVENTS_API_URL);
         if (!response.ok) {
           throw new Error('Failed to fetch events');
         }
 
         const payload = await response.json();
         const rawEvents = Array.isArray(payload) ? payload : payload.events ?? [];
-        const parsedEvents = rawEvents
-          .map((event, idx) => normalizeEvent(event, idx))
-          .filter(Boolean)
-          .filter((e) => e.estimatedAttendance > MIN_ATTENDANCE);
+        const parsedEvents = bigEvents(
+          rawEvents.map((event, idx) => normalizeEvent(event, idx)).filter(Boolean)
+        );
 
         if (!cancelled) {
-          setEvents(
-            parsedEvents.length > 0 ? parsedEvents : FALLBACK_EVENTS.filter((e) => e.estimatedAttendance > MIN_ATTENDANCE)
-          );
+          setEvents(parsedEvents.length > 0 ? parsedEvents : bigEvents(buildFallbackEvents()));
         }
       } catch {
         if (!cancelled) {
-          setEvents(FALLBACK_EVENTS.filter((e) => e.estimatedAttendance > MIN_ATTENDANCE));
+          setEvents(bigEvents(buildFallbackEvents()));
         }
       }
     };
@@ -140,7 +121,6 @@ const EventLayer = ({ timeFrame }) => {
     const endDate = addMonths(now, months);
 
     return events.filter((event) => {
-      if (event.estimatedAttendance <= MIN_ATTENDANCE) return false;
       const eventDate = new Date(event.date);
       return eventDate >= now && eventDate <= endDate;
     });

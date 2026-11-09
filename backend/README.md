@@ -9,9 +9,12 @@ our backend-owned app flow only:
 3. Human-readable explanations for selected wards or premises
 ```
 
-The backend does not depend on Yehor's `data-pipeline/` output for the current
-app flow. Yehor's files can stay in the repo, but this API is built from
-backend-owned data files.
+The ward map and premises overlay are served from files in `backend/data/`.
+The "model" data source and the DataZone endpoints load precomputed output from
+`data-pipeline/output/` (`glasgowzones.csv` and `glasgow_ward_forecasts.csv`,
+written by `data-pipeline/run_model.py`) when `main.py` starts. The API does
+not run the pipeline. If those CSVs are missing, the model endpoints return
+empty results or 503.
 
 ## Data Files
 
@@ -31,8 +34,8 @@ City Centre premises overlay:
 backend/data/city_centre_premises.json
 ```
 
-This contains prototype high-risk premises markers focused on Glasgow City
-Centre, especially:
+This contains 14 illustrative, synthetic premises markers focused on Glasgow City
+Centre. They are not real buildings or real inspection data. Areas covered:
 
 ```text
 Anderston/City/Yorkhill
@@ -49,10 +52,10 @@ planning into building-level prevention and inspection prioritisation.
 
 ## Running Locally
 
-From the backend directory:
+From the repository root, with dependencies installed (`pip install -r backend/requirements.txt`):
 
 ```bash
-python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+python -m uvicorn main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
 ```
 
 Health check:
@@ -100,6 +103,7 @@ Example:
   "status": "ok",
   "wards_loaded": 23,
   "premises_loaded": 14,
+  "zones_loaded": 746,
   "prediction_model": "linear_trend_forecast"
 }
 ```
@@ -233,16 +237,32 @@ Never say a building is unsafe.
 Say it is flagged for prevention review or inspection prioritisation.
 ```
 
-## Compatibility Endpoints
-
-These older routes still work so existing frontend code does not break:
+## Other Endpoints
 
 ```text
-GET /api/wards
-GET /api/wards.geojson
-GET /api/wards/{ward_id}
-GET /api/wards/{ward_id}/prediction
+GET /api/status               model and forecast load status
+GET /api/modes                the two map modes
+GET /api/zones?top=N          746 Glasgow DataZones with risk scores (from the pipeline)
+GET /api/zones/top?n=20       highest-risk DataZones
+GET /api/zones/{zoneid}       one DataZone
 ```
+
+`source=model` on the ward endpoints switches from the prototype scores in
+`glasgow_wards.geojson` to pipeline-based scores and SFRS dwelling-fire forecasts.
+
+## Configuration
+
+Copy `.env.example` to `.env`:
+
+```text
+OPENAI_API_KEY   optional; without it /api/explain returns template text
+OPENAI_MODEL     default gpt-4o-mini
+CORS_ORIGINS     comma-separated allowed origins, default http://localhost:5173
+```
+
+## Tests
+
+From the repository root: `python -m pytest -q`.
 
 ## Fire-Service Language Used
 

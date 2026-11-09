@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import './App.css';
 import RiskMap from './components/Map/RiskMap';
 import TopRiskAreas from './components/Dashboard/TopRiskAreas';
+import { BACKEND_URL } from './config';
 
 const TIME_FRAME_OPTIONS = ['Current', 'In 6 months', 'In 1 year', 'In 1.5 years'];
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
 function App() {
   const [timeFrame, setTimeFrame] = useState(TIME_FRAME_OPTIONS[0]);

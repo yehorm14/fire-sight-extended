@@ -3,8 +3,8 @@ FireSight — Data Pipeline Runner
 =================================
 Computes 5-component DataZone risk scores and ward-level fire forecasts.
 
-Run from inside data-pipeline/ with the venv active:
-    python run_model.py
+Fetch the raw data first (see README), then:
+    python data-pipeline/run_model.py
 
 Outputs
 -------
@@ -19,6 +19,7 @@ Data sources used
 """
 
 import ast
+import json
 import math
 import sys
 from pathlib import Path
@@ -26,12 +27,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-RAW    = Path("raw")
-OUTPUT = Path("output")
+HERE   = Path(__file__).resolve().parent
+RAW    = HERE / "raw"
+OUTPUT = HERE / "output"
 OUTPUT.mkdir(exist_ok=True)
 
 GLASGOW_CA   = "S12000049"
-GLASGOW_WARD_PREFIX = "S130029"   # Glasgow City ward feature codes
+# Glasgow City electoral wards: ids come from the backend ward polygons, so the
+# forecasts always cover exactly the wards the map draws. (A prefix filter on
+# "S130029" would match 95 wards, 73 of them outside Glasgow.)
+WARDS_GEOJSON = HERE.parent / "backend" / "data" / "glasgow_wards.geojson"
+with WARDS_GEOJSON.open() as _f:
+    GLASGOW_WARD_CODES = {ft["properties"]["ward_id"] for ft in json.load(_f)["features"]}
 
 # ---------------------------------------------------------------------------
 # Risk score weights — 5 real components, all from official SIMD data
@@ -178,7 +185,7 @@ print("\nBuilding ward-level fire forecasts ...")
 
 fire_raw = pd.read_csv(RAW / "fire_statistics_scotland.csv")
 gla_fires = fire_raw[
-    (fire_raw["FeatureCode"].str.startswith(GLASGOW_WARD_PREFIX)) &
+    (fire_raw["FeatureCode"].isin(GLASGOW_WARD_CODES)) &
     (fire_raw["Type of Fire"] == "Dwelling Fire") &
     (fire_raw["Accident Status"] == "All")
 ].copy()
@@ -245,6 +252,9 @@ for ward_code, row in pivot.iterrows():
         "slope":          r.get("slope", 0.0),
         "data_quality":   r["data_quality"],
         "years_of_data":  len(counts),
+        # financial years run "2009/2010" .. "2022/2023"; report calendar span 2009-2023
+        "first_year":     int(pivot.columns[0].split("/")[0]),
+        "last_year":      int(pivot.columns[-1].split("/")[-1]),
     })
 
 ward_forecasts_df = pd.DataFrame(ward_forecast_rows)

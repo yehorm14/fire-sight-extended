@@ -45,7 +45,11 @@ frontend/fire_website/.vite/
 *.suo
 *.sw?
 
-# Data pipeline — large raw files not needed in repo
-data-pipeline/raw/*.geojson
-data-pipeline/raw/*.csv
-data-pipeline/raw/*.xlsx
+# Data pipeline: raw downloads are fetched by data-pipeline/download_datasets.py
+data-pipeline/raw/
+
+# Tests and temp files
+.pytest_cache/
+*.tmp
+.env.local
+.env.*.local

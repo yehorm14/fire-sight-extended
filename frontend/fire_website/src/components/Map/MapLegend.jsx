@@ -29,6 +29,9 @@ const MapLegend = ({ hoveredRiskBand, onRiskBandHover }) => {
         <div className="color-box risk-low"></div>
         <span>Low Risk (0 - 39)</span>
       </div>
+      <p className="legend-subtitle">
+        Premises and event markers are illustrative sample data.
+      </p>
     </div>
   );
 };

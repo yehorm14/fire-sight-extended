@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { GeoJSON } from 'react-leaflet';
+import { BACKEND_URL } from '../../config';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
 const TIMEFRAME_ADJUSTMENTS = {
   Current: 0,

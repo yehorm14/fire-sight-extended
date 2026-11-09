@@ -1,8 +1,8 @@
 import { Marker, Pane, Popup } from 'react-leaflet';
 import { useEffect, useMemo, useState } from 'react';
 import L from 'leaflet';
+import { BACKEND_URL } from '../../config';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
 const TIMEFRAME_TO_MONTHS = {
   Current: 1,
@@ -162,6 +162,10 @@ const PremisesLayer = ({ timeFrame = 'Current', focus = 'city-centre', riskBandF
                   <strong>Recommended:</strong> {p.recommended_intervention}
                 </p>
               )}
+
+              <p className="event-popup-note">
+                <em>Illustrative sample data, not real premises.</em>
+              </p>
 
               <div className="popup-ai">
                 <div className="popup-ai-row">

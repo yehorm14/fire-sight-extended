@@ -1,0 +1,8 @@
+pandas==3.1.1
+numpy==2.5.4
+openpyxl==3.1.5
+requests==2.34.2
+# Only for notebook.ipynb:
+# jupyter
+# Only for `download_datasets.py --boundaries`:
+# geopandas
