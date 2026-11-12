@@ -1,8 +1,16 @@
 # Fire Sight
 
+[![CI](https://github.com/yehorm14/fire-sight/actions/workflows/ci.yml/badge.svg)](https://github.com/yehorm14/fire-sight/actions/workflows/ci.yml)
+![Python 3.13](https://img.shields.io/badge/python-3.13-3776AB?logo=python&logoColor=white)
+![React 19](https://img.shields.io/badge/react-19-61DAFB?logo=react&logoColor=black)
+
 A Glasgow fire-risk map for fire and rescue planners: ward risk scores, dwelling-fire forecasts and plain-language explanations.
 
 ![Fire Sight map dashboard with Glasgow wards coloured by risk band and a ranked list of top risk zones](docs/images/dashboard-map.png)
+
+## The problem
+
+Fire services cannot visit every home, so home fire safety visits have to go where they will help most. Fire risk is not spread evenly: it follows factors such as deprivation, overcrowding, poor heating and health vulnerability, and it changes over time. Fire Sight combines SIMD 2020 area indicators with Scottish Fire and Rescue Service dwelling-fire counts to score every Glasgow DataZone, forecast dwelling fires for each ward, and explain the result in plain language so planners can decide where to focus.
 
 ## Why it is useful
 
@@ -22,6 +30,19 @@ A Glasgow fire-risk map for fire and rescue planners: ward risk scores, dwelling
 ## How it works
 
 The data pipeline (`data-pipeline/`) turns SIMD 2020 and SFRS fire statistics into CSVs. The FastAPI backend (`backend/`) loads them with the ward and premises files and serves JSON. The React and Leaflet frontend (`frontend/fire_website/`) draws the map. Pipeline details: [docs/PIPELINE.md](docs/PIPELINE.md).
+
+```mermaid
+flowchart LR
+    A["SIMD 2020 and SFRS<br/>raw data"] --> B["Data pipeline<br/>(pandas)"]
+    B --> C["Output CSVs<br/>zones and ward forecasts"]
+    C --> D["FastAPI backend<br/>(JSON API)"]
+    E["Ward boundaries and<br/>sample premises"] --> D
+    D --> F["React and Leaflet<br/>map"]
+```
+
+![Ward explain panel showing a ward's forecast and three plain-language action points](docs/images/ward-explain.png)
+
+The Mock source and the premises and event overlays use illustrative sample data, not real premises or incidents. Model mode uses the pipeline output.
 
 ## Tech stack
 
@@ -50,9 +71,9 @@ Open http://localhost:5173. Environment variables and deployment: [docs/DEPLOY.m
 
 Built by Team 7 at the JPMorgan Chase Code for Good hackathon, April 2026: Illia, Monika, Jack MacLeod, Chris Johnson and Yehor Mykhailov (`yehorm14`).
 
-- Built the data pipeline and risk model: SIMD scoring, ward forecasts and the dataset downloader.
-- Wired the model output into the API, including the Mock/Model toggle and model-aware explanations.
-- Added the tests, CI, deploy configs and this documentation.
+I built the pandas data pipeline and risk model. It scores 746 Glasgow DataZones from five SIMD 2020 indicators, and produces dwelling-fire forecasts with a 95% range for the 23 wards from 14 years of SFRS statistics. I also wrote the dataset downloader and wired the model output into the API, including the Mock/Model toggle and model-aware explanations.
+
+After the hackathon I did the cleanup in this copy of the repo: tests, CI, deploy configs and documentation. The other four team members built the rest of the product between them, and I am grateful to Illia, Monika, Jack and Chris for it.
 
 ## Next steps
 

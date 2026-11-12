@@ -6,6 +6,8 @@ The processed output is committed in `data-pipeline/output/`, so the API runs wi
 
 ## Regenerate the output
 
+Raw inputs are not committed, so you must download them before `run_model.py` will work. `download_datasets.py` fetches the SIMD 2020v2 indicator workbook (`raw/simd2020_indicators.xlsx`) and the SFRS fire statistics (`raw/fire_statistics_scotland.csv`) into `data-pipeline/raw/`, which is gitignored. It skips files that already exist.
+
 ```bash
 python data-pipeline/download_datasets.py
 python data-pipeline/run_model.py
